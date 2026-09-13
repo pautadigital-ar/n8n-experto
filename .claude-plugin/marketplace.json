@@ -1,5 +1,5 @@
 {
-  "name": "n8n-mcp-skills",
+  "name": "n8n-experto",
   "description": "Expert skills for building n8n workflows",
   "owner": {
     "name": "Romuald Członkowski",
@@ -7,7 +7,7 @@
   },
   "plugins": [
     {
-      "name": "n8n-mcp-skills",
+      "name": "n8n-experto",
       "source": "./",
       "skills": [
         "./skills/n8n-expression-syntax",
