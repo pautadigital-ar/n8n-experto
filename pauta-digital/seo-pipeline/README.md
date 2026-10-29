@@ -368,6 +368,8 @@ Leyendo el 278 después de aprobado aparecieron problemas que las reglas no cubr
 | El brief llega con el JSON cortado | DeepSeek V4.1 Flash gasta `max_tokens` razonando antes de responder | `max_tokens: 16000` y `reasoning: { effort: 'low' }` |
 | El editor devuelve el texto vacío | Mismo motivo: usó los 16000 tokens pensando | Editor con `reasoning: { enabled: false }` |
 | La portada falla con "DeepSeek no devolvió JSON válido" | Mismo motivo, con un pedido de 3 líneas: 4000 tokens de razonamiento y `content: null` | `reasoning: { enabled: false }` en los pedidos cortos |
+| El agente de enlaces falla con "DeepSeek no devolvió JSON válido" (primera corrida nocturna, 29/10) | Mismo motivo: razonó más de 8000 tokens | `reasoning: { enabled: false }`; las reglas del código descartan lo que no cumpla. Contra: esa noche quedó 1 enlace válido de 5 propuestos |
+| El aviso de error sale con "modo ?" y sin el mensaje del borrador | `$('Code - Iniciar').first()` no resolvía dentro de la expresión del nodo de error | `$node['Code - Iniciar'].json` en los avisos de Internal Linking y Portada |
 | El sticker PNG sale más chico que en la referencia | Los PNG traen margen transparente; el SVG de la referencia no | Recorte automático en el navegador antes de la captura |
 | "01 // BLOG" y "pauta digital" salen en otra fuente | Chromium usa la de reserva sin avisar si un peso o tamaño no llegó a cargar | Fuente incrustada, `font-family` única y verificación de cada uso antes de capturar; si falla, no se captura |
 | WordPress responde 503 al subir la portada en PNG (568 KB) o JPEG (248 KB) | El hosting no aguanta procesar esas imágenes (genera los tamaños intermedios); el WebP pasa sin problema | Portada en WebP. Cada intento fallido igual dejó un adjunto a medio crear en la biblioteca de medios |
@@ -393,7 +395,8 @@ Leyendo el 278 después de aprobado aparecieron problemas que las reglas no cubr
 - [ ] **2 imágenes en el cuerpo del artículo** con la misma estética (pendiente a pedido de Sebas, después de ver la portada funcionando con artículos reales).
 - [x] **Indexación**: sitemap al publicar, revisión diaria con URL Inspection y lista del sábado para pedir a mano. IndexNow lo cubre Rank Math.
 - [ ] **Revisión con IA en el Auditor** (propuesta, sin implementar): relleno, repeticiones, cifras sin fuente y afirmaciones flojas, con sugerencias por Telegram.
-- [ ] **Largo**: los artículos salen ~35% más largos que lo pedido.
+- [ ] **Largo**: los artículos salen 35–45% más largos que lo pedido (29/10: 3435 palabras para 2400).
+- [ ] **Enlaces internos sin razonamiento**: la primera corrida con `reasoning` apagado dejó 1 enlace válido de 5. Probar razonamiento con más `max_tokens` (16000+) o un prompt más corto.
 - [ ] **Casos**: cargar casos reales en la pestaña `Casos` (`activo` = `si`).
 - [ ] **CTA de cursos**: hoy va a `/servicios/`; cambiar `CTA_URL` si se arma una página propia.
 - [ ] **Keywords `refresh`**: el Scout las marca pero ningún workflow las trabaja todavía (actualizar el post existente en lugar de escribir otro).
