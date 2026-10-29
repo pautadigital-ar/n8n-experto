@@ -195,10 +195,15 @@ Cualquier nodo crítico que falla ▶ Telegram - Aviso de error (incluye el avis
 ### Qué hace
 
 1. **Stickers disponibles:** los que tienen fila con `activo` = `si` en la pestaña `Stickers` **y** archivo en la carpeta de Drive "Stickers portadas (agente)" (compartida con la cuenta de servicio). Si hay archivos sin fila o filas sin archivo, lo avisa.
-2. **Textos (DeepSeek, sin razonamiento):** titular corto en dos líneas (`linea1` en hueso, `resaltado` en cyan), rótulo coral (`GUÍA PRÁCTICA`, `PRECIOS 2026`…), sticker según los `temas` y texto alternativo.
-3. **Reglas de marca en código:** sticker de la lista (si el modelo inventa uno, el de más temas en común), rótulo en mayúsculas, sin signos de exclamación ni emojis.
-4. **HTML con la plantilla:** 1600×900, fondo #0b1a1d con grilla y halos cyan, titular Space Grotesk 700 a 150 px, rótulo coral rotado −3°, sticker a la derecha rotado 6°, "01 // BLOG" y "pauta digital". La fuente se baja de Google Fonts en cada corrida y se incrusta: si no baja, la portada no se genera y llega el aviso (nunca sale con otra tipografía).
-5. **En el navegador, antes de la captura:** recorta los márgenes transparentes del sticker (cuenta solo filas y columnas con 8+ píxeles opacos, así ignora restos del recorte de fondo), le agrega la sombra dura cyan y, si una línea del titular pasa de 900 px, achica la letra (hasta 90 px) para que el sticker no la tape.
+2. **Textos (DeepSeek, sin razonamiento):** 3 opciones de titular corto en dos líneas (`linea1` en hueso, `resaltado` en cyan), rótulo coral (`GUÍA PRÁCTICA`, `PRECIOS 2026`…), sticker según los `temas` y texto alternativo.
+3. **Reglas en código:**
+   - **Tamaño del titular según la línea más larga:** hasta 14 caracteres → 150 px; 15 a 17 → 125 px; 18 a 20 → 110 px. Más de 20 no entra: se usa otra de las 3 opciones o se reparten distinto las mismas palabras; si nada baja de 21, la portada no se genera y llega el aviso. El line-height (0,95), el letter-spacing (−0,035em), la posición (x 96) y los 40 px hasta el rótulo no cambian.
+   - Sticker de la lista (si el modelo inventa uno, el de más temas en común), rótulo en mayúsculas, sin signos de exclamación ni emojis.
+4. **HTML con la plantilla:** 1600×900, fondo #0b1a1d con grilla y halos cyan (capas explícitas: fondo → grilla → halos → textos → sticker), titular Space Grotesk 700, rótulo coral rotado −3°, sticker a la derecha rotado 6°, "01 // BLOG" (700) y "pauta digital" (500). **Una sola tipografía para todo**, sin ninguna otra `font-family`: Space Grotesk se baja de Google Fonts en cada corrida y se incrusta.
+5. **En el navegador, antes de la captura:**
+   - Recorta los márgenes transparentes del sticker (cuenta solo filas y columnas con 8+ píxeles opacos, así ignora restos del recorte de fondo).
+   - Agrega la sombra dura cyan **solo si el sticker no la trae dibujada** (mira si el borde derecho ya es cyan).
+   - Carga y verifica la fuente en cada peso y tamaño que usa la plantilla (`document.fonts.load` + `document.fonts.check`). Si alguno falla, no marca la página como lista: Gotenberg corta por tiempo y llega el aviso, en vez de capturar con otra tipografía.
 6. **Gotenberg** (Easypanel, `http://n8n_gotenberg:3000`, el mismo de los carruseles) la convierte en WebP esperando `data-listo`.
 7. **WordPress:** sube la imagen (`{slug}-portada.webp`), le pone alt y título, y la deja como **imagen destacada** del borrador.
 8. **Aviso:** la foto por Telegram y el mensaje "Borrador listo" con el titular, el rótulo y el sticker usados.
@@ -212,7 +217,7 @@ Cualquier nodo crítico que falla ▶ Telegram - Aviso de error (incluye el avis
 
 Un sticker nuevo está disponible en la corrida siguiente a subirlo y cargar su fila.
 
-**Correr a mano:** `POST /webhook/portada` con `{"brief_id": "BR-…"}`.
+**Correr a mano:** `POST /webhook/portada` con `{"brief_id": "BR-…"}`. Para regenerar con textos fijos (sin IA): `{"brief_id", "linea1", "resaltado", "rotulo", "sticker": "archivo.png"}`.
 
 ---
 
@@ -297,7 +302,8 @@ Casos reales de clientes para que el redactor los use como ejemplo propio en lug
 | Destino del CTA | Writing Agent → `Code - Preparar secciones` (`CTA_URL`) |
 | Reglas del editor | Writing Agent → `Code - Ensamblar artículo` (`EDITOR`) |
 | Reglas de los enlaces internos | Internal Linking → `Code - Validar y aplicar` (`MAX`, `fraseValida`) y `Code - Armar pedido` (prompt, cantidad de candidatos) |
-| Plantilla de la portada, ancho máximo del titular | Portada → `Code - Componer HTML` (`ANCHO_MAX`) |
+| Plantilla de la portada | Portada → `Code - Componer HTML` |
+| Regla de tamaño del titular | Portada → `Code - Validar portada` (`TAMANOS`) |
 | Reglas de los textos de la portada | Portada → `Code - Armar pedido` (prompt) y `Code - Validar portada` |
 | Controles del Auditor | Auditor → `Code - Revisar posts` (bloqueos y avisos) y `Code - Decidir` (enlaces) |
 | Día y hora de publicación | Auditor → `Code - Decidir` (próximo sábado 15:00, +15 min por post) |
@@ -328,7 +334,10 @@ Leyendo el 278 después de aprobado aparecieron problemas que las reglas no cubr
 | El editor devuelve el texto vacío | Mismo motivo: usó los 16000 tokens pensando | Editor con `reasoning: { enabled: false }` |
 | La portada falla con "DeepSeek no devolvió JSON válido" | Mismo motivo, con un pedido de 3 líneas: 4000 tokens de razonamiento y `content: null` | `reasoning: { enabled: false }` en los pedidos cortos |
 | El sticker PNG sale más chico que en la referencia | Los PNG traen margen transparente; el SVG de la referencia no | Recorte automático en el navegador antes de la captura |
-| Riesgo de portada con otra tipografía | Si Chromium no puede bajar la fuente, usa otra sin avisar | La fuente se baja en el nodo Code y se incrusta; si falla, la portada no se genera |
+| "01 // BLOG" y "pauta digital" salen en otra fuente | Chromium usa la de reserva sin avisar si un peso o tamaño no llegó a cargar | Fuente incrustada, `font-family` única y verificación de cada uso antes de capturar; si falla, no se captura |
+| WordPress responde 503 al subir la portada en PNG (568 KB) o JPEG (248 KB) | El hosting no aguanta procesar esas imágenes (genera los tamaños intermedios); el WebP pasa sin problema | Portada en WebP. Cada intento fallido igual dejó un adjunto a medio crear en la biblioteca de medios |
+| "El halo derecho casi no se ve" | El sticker tapa el centro del halo; medido contra la referencia, los píxeles visibles coinciden (±1) en PNG y en WebP | Nada que corregir en el formato; capas explícitas por las dudas |
+| Sombra cyan doble en algunos stickers | Unos PNG la traen dibujada y otros no | Detección automática del borde cyan antes de agregarla |
 | El validador marca "2.227" como cifra inventada | Separador de miles distinto entre el brief y la investigación | Normalización de números antes de comparar |
 | Artículo de 4196 palabras para 2200 pedidas | Cada sección se escribía con su largo del brief más intro, FAQ y conclusión | Largo repartido proporcionalmente (intro 250, FAQ 300, conclusión 180, el resto escalado). Todavía sale ~35% largo |
 | La keyword y la meta de Rank Math no se guardan | WordPress ignora `rank_math_*` en `/wp/v2/posts`: no están registrados para REST | Nodo aparte a `POST /wp-json/rankmath/v1/updateMeta`. Respuesta OK: `{"slug":true,"schemas":[]}` |
