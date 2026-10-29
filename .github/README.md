@@ -41,6 +41,12 @@ Referencias en `skills/n8n-experto/references/`:
 | `n8n-multi-instance` | Varias instancias de n8n |
 | `n8n-self-hosting` | Instalar n8n en un servidor propio |
 
+### Workflows documentados
+
+| Workflow | Para qué |
+|---|---|
+| [SEO - Keyword Scout](../pauta-digital/seo-keyword-scout/README.md) | Cada 15 días busca conversaciones reales en X y Reddit + Google Autocomplete, extrae keywords con intención de compra, valida la SERP y la canibalización, y guarda el banco en Sheets. Incluye el [primer brief](../pauta-digital/seo-keyword-scout/brief-01-agencia-automatizacion-ia-pymes.md). |
+
 ---
 
 ## Instalación
