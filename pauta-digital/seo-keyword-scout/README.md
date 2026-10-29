@@ -2,7 +2,7 @@
 
 Workflow de n8n que cada 15 días busca **conversaciones reales** (X, Reddit) y **búsquedas reales** (Google Autocomplete) sobre las dos líneas de negocio de Pauta Digital, extrae keywords con intención de compra, las valida contra Google y las deja priorizadas en una planilla, con un resumen por Telegram.
 
-Es el paso previo al pipeline SEO existente (*SEO: Idea Telegram → Brief IA → Publicación WordPress*): el Scout decide **qué** escribir; el pipeline escribe.
+Es el primer eslabón del [pipeline SEO](../seo-pipeline/README.md): el Scout decide **qué** escribir; el Brief Agent, el Writing Agent y el SEO Auditor hacen el resto.
 
 | | |
 |---|---|
@@ -87,7 +87,7 @@ Compartida como **Editor** con la cuenta de servicio de n8n (la misma que usa el
 | `Corridas` | Log de cada ejecución | corrida_id, fecha, disparador, posts, posts_verificados, candidatas, nuevas, refresh, repetidas_descartadas, costo_usd, avisos |
 
 - `idioma` es el idioma de la **evidencia** (`es`, `en` o `mixto`); la keyword siempre se escribe en español porque el sitio es en español.
-- `usado_en_brief` se completa a mano cuando una keyword pasa al pipeline de redacción.
+- `usado_en_brief` lo completa el Brief Agent con el id del brief cuando usa la keyword (principal o secundaria).
 - `engagement` lo reporta Grok y **no se puede verificar**: usarlo como referencia, no como dato.
 
 ---
@@ -104,7 +104,7 @@ Los dos campos son opcionales:
 - `linea`: `consultoria_ia` o `cursos_automatizacion`. Sin él, corre las dos.
 - `max_serper`: cuántas keywords van a Serper. Por defecto 30, máximo 60.
 
-**Pasar una keyword al pipeline de redacción:** mandarla al bot del pipeline SEO con el formato `tipo | keyword | contexto`, y marcar `usado_en_brief` en la planilla.
+**Pasar una keyword al pipeline de redacción:** el Brief Agent toma solo la mejor cada día a las 19:00. Para forzar una: `POST /webhook/brief-agent` con `{"keyword_id": "KS-…"}`. Ver el [README del pipeline](../seo-pipeline/README.md).
 
 **Ajustes frecuentes:**
 
@@ -167,7 +167,7 @@ Todas pasaron en las pruebas de este workflow.
 - [ ] **X en español para cursos**: no trajo posts en ninguna de las tres corridas. Si sigue así, cambiar esa búsqueda por otra semilla o por otro idioma.
 - [ ] **Preguntas por keyword**: Autocomplete con prefijos casi no devuelve nada para keywords largas. Evaluar otra fuente de PAA real.
 - [ ] **Calibrar umbrales** de canibalización con más corridas.
-- [ ] **Etapa 3**: ampliar el esquema del brief del pipeline SEO (entidades, fan-out de IA, notas GEO) y conectarlo al Scout.
+- [x] **Etapa 3**: brief con entidades, fan-out de IA y notas GEO, conectado al Scout. Quedó como el [pipeline SEO](../seo-pipeline/README.md) (Brief Agent → Writing Agent → SEO Auditor).
 - [ ] Opcional: asignar un error workflow en la configuración del workflow (no se puede por MCP).
 
 Primer brief generado con estos datos: [`brief-01-agencia-automatizacion-ia-pymes.md`](brief-01-agencia-automatizacion-ia-pymes.md).
