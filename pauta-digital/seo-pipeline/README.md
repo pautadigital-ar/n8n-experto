@@ -1,6 +1,6 @@
-# Pipeline SEO de Pauta Digital: Brief Agent → Writing Agent → SEO Auditor
+# Pipeline SEO de Pauta Digital: Brief Agent → Writing Agent → Internal Linking → SEO Auditor
 
-Tres workflows de n8n que convierten el banco de keywords del [Keyword Scout](../seo-keyword-scout/README.md) en artículos programados en WordPress, con una sola intervención humana: revisar el borrador y pasarlo a **Pendiente**.
+Cuatro workflows de n8n que convierten el banco de keywords del [Keyword Scout](../seo-keyword-scout/README.md) en artículos programados en WordPress, con una sola intervención humana: revisar el borrador y pasarlo a **Pendiente**.
 
 ```
 Keyword Scout (1 y 15 de cada mes)
@@ -10,19 +10,24 @@ Brief Agent (todos los días, 19:00)      → fila en la pestaña Briefs (estado
    ▼
 Writing Agent (todos los días, 20:00)    → borrador "[VER] …" en WordPress (estado borrador)
    ▼
+Internal Linking, modo borrador          → 3 a 6 enlaces del borrador hacia posts publicados + aviso "Borrador listo"
+   ▼
 Sebas revisa el borrador y lo pasa a Pendiente
    ▼
 SEO Auditor (cada hora, 8 a 23 hs)       → aprobado: programado para el sábado 15:00
                                           → bloqueado: vuelve a Borrador con los motivos
+   ▼
+Internal Linking, modo publicado         → cuando sale el post, enlace desde hasta 3 posts viejos (estado publicado)
 ```
 
 | Workflow | Disparadores | Modelo | Costo medido |
 |---|---|---|---|
 | `SEO - Brief Agent` | Diario 19:00 (ART) · `POST /webhook/brief-agent` | DeepSeek V4.1 Flash (OpenRouter) | ~USD 0,01 por brief + 1 crédito de Serper |
 | `SEO - Writing Agent` | Diario 20:00 (ART) · `POST /webhook/writing-agent` | DeepSeek V4.1 Flash (OpenRouter) | ~USD 0,02–0,04 por borrador |
+| `SEO - Internal Linking` | Lo llama el Writing Agent · minuto 37 de cada hora, 8 a 23 (ART) · `POST /webhook/internal-linking` | DeepSeek V4.1 Flash + embeddings de Gemini | ~USD 0,002–0,01 por pasada |
 | `SEO - Auditor` | Minuto 7 de cada hora, 8 a 23 (ART) · `POST /webhook/seo-auditor` | Ninguno (reglas en código) | Gratis |
 
-Con un artículo por día: **~USD 1,50 por mes** entre brief y redacción, más ~USD 0,60 del Scout.
+Con un artículo por día: **~USD 1,60 por mes** entre brief, redacción y enlaces, más ~USD 0,60 del Scout.
 
 Todos están activos desde el 29/10/2026 en el proyecto personal de Pauta Digital en n8n. Los IDs concretos (credenciales, planilla, chat de Telegram) no van en este repo: están en los propios workflows.
 
@@ -30,7 +35,7 @@ Todos están activos desde el 29/10/2026 en el proyecto personal de Pauta Digita
 
 ## Lo que hace Sebas (la única parte manual)
 
-1. Llega por Telegram el aviso **"Borrador listo"** con el link de edición, las marcas pendientes y las afirmaciones a verificar.
+1. Llega por Telegram el aviso **"Borrador listo"** con el link de edición, las marcas pendientes, las afirmaciones a verificar y los enlaces internos que se agregaron.
 2. En WordPress, el post aparece como **`[VER] Título…`** en estado Borrador.
 3. Revisarlo:
    - Completar cada `[CASO: …]` con un caso real, o borrar la frase.
@@ -123,7 +128,51 @@ Cualquier nodo crítico que falla ▶ Telegram - Aviso de error ▶ Stop and Err
 
 ---
 
-## 3. SEO - Auditor
+## 3. SEO - Internal Linking
+
+Agrega enlaces internos en dos momentos. El modelo solo propone; las reglas las pone el código.
+
+### Flujo
+
+```
+Webhook (Writing Agent) ─┐
+Schedule (:37, 8 a 23)  ─┴─▶ Code - Iniciar ▶ Sheets - Leer briefs ▶ Code - Elegir post ▶ IF - Hay post
+  ▶ HTTP - Post nuevo ▶ HTTP - Posts publicados ▶ Code - Preparar embeddings ▶ HTTP - Gemini embeddings
+  ▶ Code - Armar pedido ▶ HTTP - DeepSeek enlaces ▶ Code - Validar y aplicar ▶ IF - Hay cambios
+       ├─ sí ▶ HTTP - WordPress guardar ─┐
+       └─ no ────────────────────────────┴▶ Code - Resumen ▶ Sheets - Actualizar brief ▶ Telegram - Resultado
+
+Cualquier nodo crítico que falla ▶ Telegram - Aviso de error ▶ Stop and Error
+```
+
+### Modo borrador (todas las noches, después del Writing Agent)
+
+1. El Writing Agent llama al webhook con el id del brief y el texto del aviso.
+2. Busca los posts publicados más parecidos al borrador (embeddings de Gemini; si fallan, palabras en común).
+3. DeepSeek propone, para hasta 8 destinos, una frase que ya está escrita en el borrador.
+4. El código aplica entre 3 y 6 y manda el aviso "Borrador listo" con la lista. Si este agente falla, el aviso sale igual (desde el Writing Agent o desde el aviso de error) con el borrador sin enlaces nuevos.
+
+### Modo publicado (cada hora)
+
+1. Busca briefs `programado` cuya hora de publicación ya pasó. Si WordPress todavía no publicó el post, espera; con más de 90 minutos de atraso avisa (el cron de WordPress se atrasa en sitios con poco tráfico).
+2. Elige hasta 6 posts viejos relacionados, sin los armados con maquetador (Elementor, Divi, WPBakery, Avada) ni los que ya enlazan al nuevo.
+3. DeepSeek propone una frase por post viejo; el código aplica **como máximo 3, un enlace por post**.
+4. El brief pasa a `publicado` con `publicado_el` y `enlaces_entrantes`, y llega un aviso con los posts cambiados y el link para editarlos.
+
+### Reglas en código
+
+- La frase existe tal cual (sin distinguir mayúsculas) y **una sola vez**, en palabras completas.
+- Fuera de títulos, de otros enlaces, de código y de comentarios de bloques de WordPress.
+- De 2 a 8 palabras; ni anclas genéricas ("acá", "este artículo", "leer más"…) ni listas separadas por comas.
+- Un enlace por destino; no repite destinos que el post ya enlaza.
+- El texto visible del post tiene que quedar **idéntico**: solo se envuelve la frase en `<a>`.
+- Para deshacer un cambio: en el editor del post → **Revisiones**.
+
+**Correr a mano:** `POST /webhook/internal-linking` con `{"modo": "borrador", "brief_id": "BR-…"}` o `{"modo": "publicado", "brief_id": "BR-…"}`.
+
+---
+
+## 4. SEO - Auditor
 
 El último eslabón. Revisa con **reglas fijas en código** los posts que Sebas pasó a Pendiente y decide si se programan.
 
@@ -174,10 +223,10 @@ La misma del Scout (`SEO - Banco de keywords (Keyword Scout)`), compartida como 
 |---|---|---|
 | `Keywords` | Scout; el Brief Agent completa `usado_en_brief` | ver el README del Scout |
 | `Evidencia` | Scout | ver el README del Scout |
-| `Briefs` | Brief Agent crea la fila; Writing Agent y Auditor la actualizan por `id` | id, fecha, keyword_id, keyword, linea, cluster, keywords_secundarias, tipo_contenido, titulo, slug, estado, brief_json, investigacion_json, verificar, costo_usd, avisos, wp_post_id, publicar_el, borrador_url, palabras, marcadores, auditoria |
+| `Briefs` | Brief Agent crea la fila; Writing Agent, Internal Linking y Auditor la actualizan por `id` | id, fecha, keyword_id, keyword, linea, cluster, keywords_secundarias, tipo_contenido, titulo, slug, estado, brief_json, investigacion_json, verificar, costo_usd, avisos, wp_post_id, publicar_el, borrador_url, palabras, marcadores, auditoria, enlaces_internos, enlaces_entrantes, publicado_el |
 | `Casos` | Sebas, a mano | activo, rubro, situacion_inicial, que_hicimos, resultado, linea, se_puede_nombrar, nombre_o_ciudad |
 
-**Estados de un brief:** `brief_listo` → `borrador` → `programado` o `bloqueado_auditoria`.
+**Estados de un brief:** `brief_listo` → `borrador` → `programado` o `bloqueado_auditoria` → `publicado`.
 
 ### Pestaña `Casos`
 
@@ -201,6 +250,7 @@ Casos reales de clientes para que el redactor los use como ejemplo propio en lug
 | Voz, reglas anti-invento o modelo del redactor | Writing Agent → `Code - Preparar secciones` (`SYSTEM`, `MODELO`) |
 | Destino del CTA | Writing Agent → `Code - Preparar secciones` (`CTA_URL`) |
 | Reglas del editor | Writing Agent → `Code - Ensamblar artículo` (`EDITOR`) |
+| Reglas de los enlaces internos | Internal Linking → `Code - Validar y aplicar` (`MAX`, `fraseValida`) y `Code - Armar pedido` (prompt, cantidad de candidatos) |
 | Controles del Auditor | Auditor → `Code - Revisar posts` (bloqueos y avisos) y `Code - Decidir` (enlaces) |
 | Día y hora de publicación | Auditor → `Code - Decidir` (próximo sábado 15:00, +15 min por post) |
 
@@ -215,6 +265,7 @@ Casos reales de clientes para que el redactor los use como ejemplo propio en lug
 | Borrador 278 | Con las correcciones: Rank Math guardado, USD 0,0378. Salió con slug `-2` porque el 277 ocupaba el slug |
 | Revisión manual | Sebas completó los `[CASO]`, corrigió el slug y lo pasó a Pendiente |
 | Auditor | Aprobado sin observaciones: 2974 palabras, 4 enlaces con 200 OK. Programado para el sábado 31/10 a las 15:00 |
+| Internal Linking (prueba en modo borrador) | 4 enlaces nuevos hacia posts publicados, USD 0,002. Dos anclas salieron flojas (una lista de herramientas): desde ahí el código rechaza anclas con listas separadas por comas |
 
 Leyendo el 278 después de aprobado aparecieron problemas que las reglas no cubrían: dos secciones de preguntas frecuentes seguidas, el mismo dato (87,3%) repetido 5 veces, un ejemplo con montos inventados y una afirmación sin respaldo. Las dos secciones de preguntas y los datos repetidos se corrigieron en el Writing Agent y quedaron como controles del Auditor; el resto es lo que cubriría la revisión con IA.
 
@@ -241,6 +292,8 @@ Leyendo el 278 después de aprobado aparecieron problemas que las reglas no cubr
 
 ## Pendientes
 
+- [ ] **Image Agent**: portada con la plantilla de marca (sticker + titular) renderizada en el Gotenberg del VPS. Faltan los SVG de stickers y la portada de referencia.
+- [ ] **GSC Agent**: re-envío del sitemap al publicar, IndexNow y chequeo de indexación a los 3 y 7 días (sin la Indexing API, que Google solo permite para empleos y transmisiones en vivo).
 - [ ] **Revisión con IA en el Auditor** (propuesta, sin implementar): relleno, repeticiones, cifras sin fuente y afirmaciones flojas, con sugerencias por Telegram.
 - [ ] **Largo**: los artículos salen ~35% más largos que lo pedido.
 - [ ] **Casos**: cargar casos reales en la pestaña `Casos` (`activo` = `si`).
