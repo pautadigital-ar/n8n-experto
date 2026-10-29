@@ -1,6 +1,6 @@
-# Pipeline SEO de Pauta Digital: Brief Agent → Writing Agent → Internal Linking → SEO Auditor
+# Pipeline SEO de Pauta Digital: Brief Agent → Writing Agent → Internal Linking → Portada → SEO Auditor
 
-Cuatro workflows de n8n que convierten el banco de keywords del [Keyword Scout](../seo-keyword-scout/README.md) en artículos programados en WordPress, con una sola intervención humana: revisar el borrador y pasarlo a **Pendiente**.
+Cinco workflows de n8n que convierten el banco de keywords del [Keyword Scout](../seo-keyword-scout/README.md) en artículos programados en WordPress, con una sola intervención humana: revisar el borrador y pasarlo a **Pendiente**.
 
 ```
 Keyword Scout (1 y 15 de cada mes)
@@ -10,7 +10,9 @@ Brief Agent (todos los días, 19:00)      → fila en la pestaña Briefs (estado
    ▼
 Writing Agent (todos los días, 20:00)    → borrador "[VER] …" en WordPress (estado borrador)
    ▼
-Internal Linking, modo borrador          → 3 a 6 enlaces del borrador hacia posts publicados + aviso "Borrador listo"
+Internal Linking, modo borrador          → 3 a 6 enlaces del borrador hacia posts publicados
+   ▼
+Portada                                  → imagen destacada con la plantilla de marca + aviso "Borrador listo" con la foto
    ▼
 Sebas revisa el borrador y lo pasa a Pendiente
    ▼
@@ -25,9 +27,10 @@ Internal Linking, modo publicado         → cuando sale el post, enlace desde h
 | `SEO - Brief Agent` | Diario 19:00 (ART) · `POST /webhook/brief-agent` | DeepSeek V4.1 Flash (OpenRouter) | ~USD 0,01 por brief + 1 crédito de Serper |
 | `SEO - Writing Agent` | Diario 20:00 (ART) · `POST /webhook/writing-agent` | DeepSeek V4.1 Flash (OpenRouter) | ~USD 0,02–0,04 por borrador |
 | `SEO - Internal Linking` | Lo llama el Writing Agent · minuto 37 de cada hora, 8 a 23 (ART) · `POST /webhook/internal-linking` | DeepSeek V4.1 Flash + embeddings de Gemini | ~USD 0,002–0,01 por pasada |
+| `SEO - Portada` | Lo llama Internal Linking · `POST /webhook/portada` | DeepSeek V4.1 Flash (solo textos) + Gotenberg | ~USD 0,001 por portada |
 | `SEO - Auditor` | Minuto 7 de cada hora, 8 a 23 (ART) · `POST /webhook/seo-auditor` | Ninguno (reglas en código) | Gratis |
 
-Con un artículo por día: **~USD 1,60 por mes** entre brief, redacción y enlaces, más ~USD 0,60 del Scout.
+Con un artículo por día: **~USD 1,60 por mes** entre brief, redacción, enlaces y portada, más ~USD 0,60 del Scout.
 
 Todos están activos desde el 29/10/2026 en el proyecto personal de Pauta Digital en n8n. Los IDs concretos (credenciales, planilla, chat de Telegram) no van en este repo: están en los propios workflows.
 
@@ -35,7 +38,7 @@ Todos están activos desde el 29/10/2026 en el proyecto personal de Pauta Digita
 
 ## Lo que hace Sebas (la única parte manual)
 
-1. Llega por Telegram el aviso **"Borrador listo"** con el link de edición, las marcas pendientes, las afirmaciones a verificar y los enlaces internos que se agregaron.
+1. Llegan por Telegram la **portada** y el aviso **"Borrador listo"** con el link de edición, las marcas pendientes, las afirmaciones a verificar y los enlaces internos que se agregaron.
 2. En WordPress, el post aparece como **`[VER] Título…`** en estado Borrador.
 3. Revisarlo:
    - Completar cada `[CASO: …]` con un caso real, o borrar la frase.
@@ -140,7 +143,9 @@ Schedule (:37, 8 a 23)  ─┴─▶ Code - Iniciar ▶ Sheets - Leer briefs ▶
   ▶ HTTP - Post nuevo ▶ HTTP - Posts publicados ▶ Code - Preparar embeddings ▶ HTTP - Gemini embeddings
   ▶ Code - Armar pedido ▶ HTTP - DeepSeek enlaces ▶ Code - Validar y aplicar ▶ IF - Hay cambios
        ├─ sí ▶ HTTP - WordPress guardar ─┐
-       └─ no ────────────────────────────┴▶ Code - Resumen ▶ Sheets - Actualizar brief ▶ Telegram - Resultado
+       └─ no ────────────────────────────┴▶ Code - Resumen ▶ Sheets - Actualizar brief ▶ IF - Modo borrador
+                                                   ├─ borrador ▶ HTTP - Pasar a portada (si falla ▶ Telegram - Borrador listo sin portada)
+                                                   └─ publicado ▶ Telegram - Resultado
 
 Cualquier nodo crítico que falla ▶ Telegram - Aviso de error ▶ Stop and Error
 ```
@@ -150,7 +155,7 @@ Cualquier nodo crítico que falla ▶ Telegram - Aviso de error ▶ Stop and Err
 1. El Writing Agent llama al webhook con el id del brief y el texto del aviso.
 2. Busca los posts publicados más parecidos al borrador (embeddings de Gemini; si fallan, palabras en común).
 3. DeepSeek propone, para hasta 8 destinos, una frase que ya está escrita en el borrador.
-4. El código aplica entre 3 y 6 y manda el aviso "Borrador listo" con la lista. Si este agente falla, el aviso sale igual (desde el Writing Agent o desde el aviso de error) con el borrador sin enlaces nuevos.
+4. El código aplica entre 3 y 6 y le pasa la posta a **SEO - Portada** con el texto del aviso más la lista de enlaces. Si este agente falla, el aviso sale igual (desde el Writing Agent o desde el aviso de error) con el borrador sin enlaces nuevos; si falla la llamada a Portada, el aviso sale desde acá sin portada.
 
 ### Modo publicado (cada hora)
 
@@ -172,7 +177,46 @@ Cualquier nodo crítico que falla ▶ Telegram - Aviso de error ▶ Stop and Err
 
 ---
 
-## 4. SEO - Auditor
+## 4. SEO - Portada
+
+Genera la imagen destacada del borrador con la **plantilla de marca aprobada**: no hay modelo de imagen; la IA solo escribe los textos y elige el sticker.
+
+### Flujo
+
+```
+Webhook (Internal Linking) ▶ Code - Iniciar ▶ Sheets - Leer briefs ▶ Sheets - Leer stickers ▶ Google Drive - Listar stickers
+  ▶ Code - Armar pedido ▶ HTTP - DeepSeek portada ▶ Code - Validar portada ▶ Google Drive - Bajar sticker
+  ▶ Code - Componer HTML ▶ HTTP - Gotenberg render ▶ HTTP - WordPress subir imagen ▶ HTTP - WordPress texto alternativo
+  ▶ HTTP - WordPress poner destacada ▶ Code - Resumen ▶ Sheets - Actualizar brief ▶ Telegram - Foto de la portada ▶ Telegram - Borrador listo
+
+Cualquier nodo crítico que falla ▶ Telegram - Aviso de error (incluye el aviso del borrador) ▶ Stop and Error
+```
+
+### Qué hace
+
+1. **Stickers disponibles:** los que tienen fila con `activo` = `si` en la pestaña `Stickers` **y** archivo en la carpeta de Drive "Stickers portadas (agente)" (compartida con la cuenta de servicio). Si hay archivos sin fila o filas sin archivo, lo avisa.
+2. **Textos (DeepSeek, sin razonamiento):** titular corto en dos líneas (`linea1` en hueso, `resaltado` en cyan), rótulo coral (`GUÍA PRÁCTICA`, `PRECIOS 2026`…), sticker según los `temas` y texto alternativo.
+3. **Reglas de marca en código:** sticker de la lista (si el modelo inventa uno, el de más temas en común), rótulo en mayúsculas, sin signos de exclamación ni emojis.
+4. **HTML con la plantilla:** 1600×900, fondo #0b1a1d con grilla y halos cyan, titular Space Grotesk 700 a 150 px, rótulo coral rotado −3°, sticker a la derecha rotado 6°, "01 // BLOG" y "pauta digital". La fuente se baja de Google Fonts en cada corrida y se incrusta: si no baja, la portada no se genera y llega el aviso (nunca sale con otra tipografía).
+5. **En el navegador, antes de la captura:** recorta los márgenes transparentes del sticker (cuenta solo filas y columnas con 8+ píxeles opacos, así ignora restos del recorte de fondo), le agrega la sombra dura cyan y, si una línea del titular pasa de 900 px, achica la letra (hasta 90 px) para que el sticker no la tape.
+6. **Gotenberg** (Easypanel, `http://n8n_gotenberg:3000`, el mismo de los carruseles) la convierte en WebP esperando `data-listo`.
+7. **WordPress:** sube la imagen (`{slug}-portada.webp`), le pone alt y título, y la deja como **imagen destacada** del borrador.
+8. **Aviso:** la foto por Telegram y el mensaje "Borrador listo" con el titular, el rótulo y el sticker usados.
+
+### Stickers
+
+| Dónde | Qué |
+|---|---|
+| Drive: "Portadas Blog / Stickers portadas (agente)" | Los archivos. Mejor SVG; sirve PNG con fondo transparente de 1200×1200 o más |
+| Planilla, pestaña `Stickers` | `activo` (`si`), `archivo` (nombre exacto), `que_es`, `temas` (de qué artículos puede ser portada: es lo que usa la IA para elegir) |
+
+Un sticker nuevo está disponible en la corrida siguiente a subirlo y cargar su fila.
+
+**Correr a mano:** `POST /webhook/portada` con `{"brief_id": "BR-…"}`.
+
+---
+
+## 5. SEO - Auditor
 
 El último eslabón. Revisa con **reglas fijas en código** los posts que Sebas pasó a Pendiente y decide si se programan.
 
@@ -202,6 +246,7 @@ Solo audita posts Pendientes que tienen fila en la pestaña `Briefs`. Un post Pe
 | Títulos de sección repetidos | Enlaces que responden 403, 429 o 5xx |
 | Enlaces 404/410 o dominios que no responden | |
 | Post sin título | |
+| Post sin imagen destacada (portada) | |
 
 **Aprobado:** saca el `[VER]` del título y lo programa (`status: future`) para el próximo sábado a las 15:00, con 15 minutos entre posts del mismo sábado. En la planilla: estado `programado`, `publicar_el` y "Aprobado sin observaciones" (o los avisos) en `auditoria`.
 
@@ -223,8 +268,9 @@ La misma del Scout (`SEO - Banco de keywords (Keyword Scout)`), compartida como 
 |---|---|---|
 | `Keywords` | Scout; el Brief Agent completa `usado_en_brief` | ver el README del Scout |
 | `Evidencia` | Scout | ver el README del Scout |
-| `Briefs` | Brief Agent crea la fila; Writing Agent, Internal Linking y Auditor la actualizan por `id` | id, fecha, keyword_id, keyword, linea, cluster, keywords_secundarias, tipo_contenido, titulo, slug, estado, brief_json, investigacion_json, verificar, costo_usd, avisos, wp_post_id, publicar_el, borrador_url, palabras, marcadores, auditoria, enlaces_internos, enlaces_entrantes, publicado_el |
+| `Briefs` | Brief Agent crea la fila; Writing Agent, Internal Linking, Portada y Auditor la actualizan por `id` | id, fecha, keyword_id, keyword, linea, cluster, keywords_secundarias, tipo_contenido, titulo, slug, estado, brief_json, investigacion_json, verificar, costo_usd, avisos, wp_post_id, publicar_el, borrador_url, palabras, marcadores, auditoria, enlaces_internos, enlaces_entrantes, publicado_el, portada_media_id, portada_url |
 | `Casos` | Sebas, a mano | activo, rubro, situacion_inicial, que_hicimos, resultado, linea, se_puede_nombrar, nombre_o_ciudad |
+| `Stickers` | Sebas, a mano | activo, archivo, que_es, temas |
 
 **Estados de un brief:** `brief_listo` → `borrador` → `programado` o `bloqueado_auditoria` → `publicado`.
 
@@ -251,6 +297,8 @@ Casos reales de clientes para que el redactor los use como ejemplo propio en lug
 | Destino del CTA | Writing Agent → `Code - Preparar secciones` (`CTA_URL`) |
 | Reglas del editor | Writing Agent → `Code - Ensamblar artículo` (`EDITOR`) |
 | Reglas de los enlaces internos | Internal Linking → `Code - Validar y aplicar` (`MAX`, `fraseValida`) y `Code - Armar pedido` (prompt, cantidad de candidatos) |
+| Plantilla de la portada, ancho máximo del titular | Portada → `Code - Componer HTML` (`ANCHO_MAX`) |
+| Reglas de los textos de la portada | Portada → `Code - Armar pedido` (prompt) y `Code - Validar portada` |
 | Controles del Auditor | Auditor → `Code - Revisar posts` (bloqueos y avisos) y `Code - Decidir` (enlaces) |
 | Día y hora de publicación | Auditor → `Code - Decidir` (próximo sábado 15:00, +15 min por post) |
 
@@ -265,6 +313,7 @@ Casos reales de clientes para que el redactor los use como ejemplo propio en lug
 | Borrador 278 | Con las correcciones: Rank Math guardado, USD 0,0378. Salió con slug `-2` porque el 277 ocupaba el slug |
 | Revisión manual | Sebas completó los `[CASO]`, corrigió el slug y lo pasó a Pendiente |
 | Auditor | Aprobado sin observaciones: 2974 palabras, 4 enlaces con 200 OK. Programado para el sábado 31/10 a las 15:00 |
+| Portada (prueba) | "Costo de agencia / de IA en 2026" · GUÍA PRÁCTICA · `monedas.png`. WebP 1600×900 subida como destacada (media 283) en 13 segundos. La primera corrida falló: DeepSeek se gastó los 4000 tokens razonando |
 | Internal Linking (prueba en modo borrador) | 4 enlaces nuevos hacia posts publicados, USD 0,002. Dos anclas salieron flojas (una lista de herramientas): desde ahí el código rechaza anclas con listas separadas por comas |
 
 Leyendo el 278 después de aprobado aparecieron problemas que las reglas no cubrían: dos secciones de preguntas frecuentes seguidas, el mismo dato (87,3%) repetido 5 veces, un ejemplo con montos inventados y una afirmación sin respaldo. Las dos secciones de preguntas y los datos repetidos se corrigieron en el Writing Agent y quedaron como controles del Auditor; el resto es lo que cubriría la revisión con IA.
@@ -277,6 +326,9 @@ Leyendo el 278 después de aprobado aparecieron problemas que las reglas no cubr
 |---|---|---|
 | El brief llega con el JSON cortado | DeepSeek V4.1 Flash gasta `max_tokens` razonando antes de responder | `max_tokens: 16000` y `reasoning: { effort: 'low' }` |
 | El editor devuelve el texto vacío | Mismo motivo: usó los 16000 tokens pensando | Editor con `reasoning: { enabled: false }` |
+| La portada falla con "DeepSeek no devolvió JSON válido" | Mismo motivo, con un pedido de 3 líneas: 4000 tokens de razonamiento y `content: null` | `reasoning: { enabled: false }` en los pedidos cortos |
+| El sticker PNG sale más chico que en la referencia | Los PNG traen margen transparente; el SVG de la referencia no | Recorte automático en el navegador antes de la captura |
+| Riesgo de portada con otra tipografía | Si Chromium no puede bajar la fuente, usa otra sin avisar | La fuente se baja en el nodo Code y se incrusta; si falla, la portada no se genera |
 | El validador marca "2.227" como cifra inventada | Separador de miles distinto entre el brief y la investigación | Normalización de números antes de comparar |
 | Artículo de 4196 palabras para 2200 pedidas | Cada sección se escribía con su largo del brief más intro, FAQ y conclusión | Largo repartido proporcionalmente (intro 250, FAQ 300, conclusión 180, el resto escalado). Todavía sale ~35% largo |
 | La keyword y la meta de Rank Math no se guardan | WordPress ignora `rank_math_*` en `/wp/v2/posts`: no están registrados para REST | Nodo aparte a `POST /wp-json/rankmath/v1/updateMeta`. Respuesta OK: `{"slug":true,"schemas":[]}` |
@@ -292,7 +344,8 @@ Leyendo el 278 después de aprobado aparecieron problemas que las reglas no cubr
 
 ## Pendientes
 
-- [ ] **Image Agent**: portada con la plantilla de marca (sticker + titular) renderizada en el Gotenberg del VPS. Faltan los SVG de stickers y la portada de referencia.
+- [x] **Portada**: andando con 8 stickers (30 planeados).
+- [ ] **2 imágenes en el cuerpo del artículo** con la misma estética (pendiente a pedido de Sebas, después de ver la portada funcionando con artículos reales).
 - [ ] **GSC Agent**: re-envío del sitemap al publicar, IndexNow y chequeo de indexación a los 3 y 7 días (sin la Indexing API, que Google solo permite para empleos y transmisiones en vivo).
 - [ ] **Revisión con IA en el Auditor** (propuesta, sin implementar): relleno, repeticiones, cifras sin fuente y afirmaciones flojas, con sugerencias por Telegram.
 - [ ] **Largo**: los artículos salen ~35% más largos que lo pedido.

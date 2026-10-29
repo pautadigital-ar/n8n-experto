@@ -46,7 +46,7 @@ Referencias en `skills/n8n-experto/references/`:
 | Workflow | Para qué |
 |---|---|
 | [SEO - Keyword Scout](../pauta-digital/seo-keyword-scout/README.md) | Cada 15 días busca conversaciones reales en X y Reddit + Google Autocomplete, extrae keywords con intención de compra, valida la SERP y la canibalización, y guarda el banco en Sheets. Incluye el [primer brief](../pauta-digital/seo-keyword-scout/brief-01-agencia-automatizacion-ia-pymes.md). |
-| [Pipeline SEO: Brief Agent → Writing Agent → Internal Linking → SEO Auditor](../pauta-digital/seo-pipeline/README.md) | Todos los días arma un brief con la mejor keyword del banco (SERP real, preguntas de Autocomplete, evidencia), redacta el artículo por secciones, lo sube como borrador a WordPress y le agrega enlaces internos. Después de la revisión humana, el Auditor lo controla con reglas fijas y lo programa para el sábado 15 hs; al publicarse, hasta 3 posts viejos pasan a enlazarlo. |
+| [Pipeline SEO: Brief Agent → Writing Agent → Internal Linking → Portada → SEO Auditor](../pauta-digital/seo-pipeline/README.md) | Todos los días arma un brief con la mejor keyword del banco (SERP real, preguntas de Autocomplete, evidencia), redacta el artículo por secciones, lo sube como borrador a WordPress, le agrega enlaces internos y le genera la portada con la plantilla de marca. Después de la revisión humana, el Auditor lo controla con reglas fijas y lo programa para el sábado 15 hs; al publicarse, hasta 3 posts viejos pasan a enlazarlo. |
 
 ---
 
